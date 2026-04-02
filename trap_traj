@@ -1,0 +1,79 @@
+import numpy as np
+
+from funrobo_kinematics.core.trajectory_generator import MultiAxisTrajectoryGenerator, MultiSegmentTrajectoryGenerator
+
+class TrapezoidalTrajectory():
+
+    def __init__(self, ndof=None):
+        self.ndof = ndof
+
+    def solve(self, q0, qf, qd0, qdf, T, vmax=None):
+
+        self.q0 = np.asarray(q0, dtype=float)
+        self.qf = np.asarray(qf, dtype=float)
+        self.T = T
+
+        dq = self.qf - self.q0
+
+        if vmax is None:
+            ta = T / 4
+            self.ta = ta
+            self.tc = T - 2 * ta
+            self.vmax = dq / (ta + self.tc)
+        else:
+            self.vmax = np.asarray(vmax, dtype=float)
+            self.ta = self.vmax / (self.vmax / (T / 2)) 
+            self.tc = T - 2 * self.ta
+
+        self.a = self.vmax / self.ta
+
+    def generate(self, t0=0, tf=1, nsteps=100):
+        t = np.linspace(t0, tf, nsteps)
+        X = np.zeros((self.ndof, 3, len(t)))
+
+        for i in range(self.ndof):
+            q0 = self.q0[i]
+            qf = self.qf[i]
+            vmax = self.vmax[i]
+            a = self.a[i]
+            ta = self.ta
+            tc = self.tc
+            T = self.T
+
+            for j, tj in enumerate(t):
+
+                if tj < ta:
+                    q = q0 + 0.5 * a * tj**2
+                    qd = a * tj
+                    qdd = a
+
+                elif tj < ta + tc:
+                    q = q0 + 0.5 * a * ta**2 + vmax * (tj - ta)
+                    qd = vmax
+                    qdd = 0
+
+                else:
+                    td = tj - (ta + tc)
+                    q = (qf - 0.5 * a * (T - tj)**2)
+                    qd = vmax - a * td
+                    qdd = -a
+
+                X[i, 0, j] = q
+                X[i, 1, j] = qd
+                X[i, 2, j] = qdd
+
+        return t, X
+
+ndof = 2
+via_points = [[0, 0], [1, 2]]
+
+method = TrapezoidalTrajectory(ndof=ndof)    
+traj = MultiSegmentTrajectoryGenerator(
+    method=method,
+    mode="joint",
+    ndof=ndof,
+)
+
+traj.solve(via_points, T=2)
+traj.generate(nsteps_per_segment=20)
+traj.plot()

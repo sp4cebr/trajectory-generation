@@ -1,0 +1,104 @@
+import numpy as np
+import time
+
+from funrobo_kinematics.core.trajectory_generator import MultiAxisTrajectoryGenerator, MultiSegmentTrajectoryGenerator
+
+class QuinticPolynomial():
+    """
+    Quintic interpolation with position, velocity, and acceleration constraints.
+    """
+
+    def __init__(self, ndof=None):
+        self.ndof = ndof
+
+    def solve(self, q0, qf, qd0=None, qdf=None, qdd0=None, qddf=None, T=1):
+        t0, tf = 0, T
+
+        q0 = np.asarray(q0, dtype=float)
+        qf = np.asarray(qf, dtype=float)
+
+        qd0 = np.zeros_like(q0) if qd0 is None else np.asarray(qd0, dtype=float)
+        qdf = np.zeros_like(q0) if qdf is None else np.asarray(qdf, dtype=float)
+
+        qdd0 = np.zeros_like(q0) if qdd0 is None else np.asarray(qdd0, dtype=float)
+        qddf = np.zeros_like(q0) if qddf is None else np.asarray(qddf, dtype=float)
+
+        # 6x6 system
+        A = np.array([
+            [1, t0, t0**2, t0**3, t0**4, t0**5],
+            [0, 1, 2*t0, 3*t0**2, 4*t0**3, 5*t0**4],
+            [0, 0, 2, 6*t0, 12*t0**2, 20*t0**3],
+            [1, tf, tf**2, tf**3, tf**4, tf**5],
+            [0, 1, 2*tf, 3*tf**2, 4*tf**3, 5*tf**4],
+            [0, 0, 2, 6*tf, 12*tf**2, 20*tf**3]
+        ])
+
+        b = np.vstack([
+            q0,
+            qd0,
+            qdd0,
+            qf,
+            qdf,
+            qddf
+        ])
+
+        self.coeff = np.linalg.solve(A, b)
+
+    def generate(self, t0=0, tf=1, nsteps=100):
+        t = np.linspace(t0, tf, nsteps)
+        X = np.zeros((self.ndof, 3, len(t)))
+
+        for i in range(self.ndof):
+            c = self.coeff[:, i]
+
+            q = (c[0] + c[1]*t + c[2]*t**2 + 
+                 c[3]*t**3 + c[4]*t**4 + c[5]*t**5)
+
+            qd = (c[1] + 2*c[2]*t + 3*c[3]*t**2 +
+                  4*c[4]*t**3 + 5*c[5]*t**4)
+
+            qdd = (2*c[2] + 6*c[3]*t +
+                   12*c[4]*t**2 + 20*c[5]*t**3)
+
+            X[i, 0, :] = q
+            X[i, 1, :] = qd
+            X[i, 2, :] = qdd
+
+        return t, X
+
+
+def main():
+    ndof = 2
+    method = QuinticPolynomial(ndof=ndof)
+    mode = "joint"
+
+    # --------------------------------------------------------
+    # Point-to-point multi-axis trajectory generator
+    # --------------------------------------------------------
+
+    # traj = MultiAxisTrajectoryGenerator(method=method,
+    #                                     mode=mode,
+    #                                     ndof=ndof)
+    
+    # traj.solve(q0=-30, qf=60, T=1)
+    # traj.generate(nsteps=20)
+
+    # --------------------------------------------------------
+    # Via point multi-axis trajectory generator
+    # --------------------------------------------------------
+
+    traj = MultiSegmentTrajectoryGenerator(method=method,
+                                           mode=mode,
+                                           ndof=ndof,
+                                            )
+    via_points = [[-30, 30], [0, 45], [30, 15], [50, -30]]
+
+    traj.solve(via_points, T=2)
+    traj.generate(nsteps_per_segment=20)
+    
+    
+    # plotter
+    traj.plot()
+
+if __name__ == "__main__":
+    main()
