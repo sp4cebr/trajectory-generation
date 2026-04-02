@@ -1,0 +1,39 @@
+import time
+from examples.two_dof_rrmc import TwoDOFRobot  # Replace with actual model, e.g., TwoDOF or Hiwonder
+from funrobo_kinematics.core.visualizer import Visualizer, RobotSim  # Assuming viz.py contains the classes
+
+# Initialize robot model (example: replace with your model)
+robot_model = TwoDOFRobot()  # e.g., TwoDOF() or Hiwonder()
+
+# Define trajectory methods to demonstrate
+methods = ["quintic", "trapezoidal"]
+
+for method in methods:
+    print(f"\nDemonstrating trajectories with {method} method...")
+    
+    # Initialize RobotSim and Visualizer with the current method
+    robot_sim = RobotSim(robot_model=robot_model, traj_model=method)
+    viz = Visualizer(robot_sim)
+    
+    # Simulate generating a path (set start/goal in GUI or hardcode)
+    # For demo, assume GUI entries are set; in code, you could set them directly
+    viz.start_config.delete(0, 'end')
+    viz.start_config.insert(0, "[0, 0]")  # Example start config in degrees
+    viz.goal_config.delete(0, 'end')
+    viz.goal_config.insert(0, "[90, 45]")  # Example goal config in degrees
+    viz.generate_path()  # This sets self.path
+    
+    # Generate and visualize task-space trajectory
+    viz.generate_traj_task_space()
+    
+    # Wait a bit, then generate joint-space trajectory
+    time.sleep(2)
+    viz.generate_traj_joint_space()
+    
+    # Keep GUI open briefly for viewing (adjust time)
+    time.sleep(5)
+    
+    # Close the GUI window after each method
+    viz.root.destroy()
+
+print("Demo complete for both quintic and trapezoidal methods.")
